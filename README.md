@@ -10,6 +10,7 @@
   - If unsuccessful, try a unique name of your own. And then update the variable *bucket_name* in server and client
 - Update the variables `client_private_ips` and `client_public_ips` in server
 - Update the variable `client_no` in the client
+  - Do remember which client VM you are assigning as client_no 1, 2, 3, etc.
 - Make sure the file `cloud.json` is present in the server and the clients
   - To setup, watch [this](https://www.youtube.com/watch?v=pEbL_TT9cHg) YouTube video (first 4 min)
 - Make sure all the VMs have the necessary python packages installed (*scikit, tqdm, tensorflow, etc.*)
