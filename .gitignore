@@ -1,0 +1,8 @@
+# PYCACHE FOLDER
+__pycache__/
+*.pkl
+# cloud credentials
+cloud.json
+
+# SSH Private key
+id_rsa

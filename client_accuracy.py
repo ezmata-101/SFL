@@ -19,7 +19,9 @@ from tensorflow.keras.losses import SparseCategoricalCrossentropy
 from tensorflow.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.models import load_model
 
-bucket_name = 'hfl-data'
+from common import *
+
+bucket_name = GOOGLE_BUCKET_NAME
 storage_client = storage.Client()
 X_test = None
 y_test = None

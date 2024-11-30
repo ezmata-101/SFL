@@ -23,6 +23,8 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
+from common import *
+
 '''
 Arguments:
  loss, metrics, (lr, decay, momentum): SGD, (shape, classes_count): SimpleMLP, global_weights, epochs, verbose, client_batched_data
@@ -47,7 +49,7 @@ X_train = None
 y_train = None
 agg_gradients = None
 
-bucket_name = 'hfl-data'
+bucket_name = GOOGLE_BUCKET_NAME
 storage_client = storage.Client()
 SERVER_FILE = 'agg_gradients.pkl'
 batch_size = 32

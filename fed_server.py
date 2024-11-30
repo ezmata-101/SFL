@@ -2,6 +2,8 @@ import os
 import traceback
 import glob
 import math
+import threading
+
 from google.cloud import storage
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'cloud.json'
@@ -23,6 +25,8 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.losses import SparseCategoricalCrossentropy
 from tensorflow.keras import backend as K
 
+from common import *
+
 # Define hyperparameters
 SYNC_MODE = True
 lr = 0.01
@@ -37,7 +41,7 @@ momentum = 0.9
 classes_count = 3
 shape = None
 
-bucket_name = 'hfl-data'
+bucket_name = GOOGLE_BUCKET_NAME
 storage_client = storage.Client()
 data_path = './swarm_aligned'
 clients = None
@@ -53,19 +57,22 @@ t = 2**63
 poly_mod = np.array([1] + [0] * (n - 1) + [1])
 
 # Data Structures
-client_private_ips = [
-    '10.128.0.3',
-    '10.128.0.4',
-    '10.128.0.5',
-    '10.128.0.6'
-]
+# client_private_ips = [
+#     '10.128.0.3',
+#     '10.128.0.4',
+#     '10.128.0.5',
+#     '10.128.0.6'
+# ]
 
-client_public_ips = [
-    '104.197.89.108',
-    '34.41.69.242',
-    '34.30.32.19',
-    '34.27.85.124'
-]
+# client_public_ips = [
+#     '104.197.89.108',
+#     '34.41.69.242',
+#     '34.30.32.19',
+#     '34.27.85.124'
+# ]
+
+client_private_ips = CLIENT_PRIVATE_ADDRESSES
+client_public_ips = CLIENT_PUBLIC_ADDRESSES
 
 global_gradient = None
 
@@ -278,7 +285,7 @@ def new_global_training():
             public_ip = client_public_ips[client_no - 1]
 
             start = datetime.now()
-            ssh_command = f'ssh uncleroger@{private_ip} "python3 test_client.py {loss} {metrics} {lr} {decay} {momentum} {shape} {classes_count} {client_epoch} {client_verbose}"'
+            ssh_command = f'ssh -i id_rsa {COMMON_USERNAME}@{private_ip} "python3 test_client.py {loss} {metrics} {lr} {decay} {momentum} {shape} {classes_count} {client_epoch} {client_verbose}"'
             result = subprocess.check_output(ssh_command, shell=True, text=True).strip() #the result contains the local model weights
             end = datetime.now()
             client_tt = (end-start).total_seconds()

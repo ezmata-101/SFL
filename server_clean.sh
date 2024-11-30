@@ -30,5 +30,11 @@ for ((i=1; i<=4; i++)); do
 done
 
 cd LA/
-rm *
-echo "Folder LA/ cleared"
+
+# if the last command was successful, clear the folder
+if [ $? -eq 0 ]; then
+    rm *
+    echo "Folder LA/ cleared"
+else
+    echo "Error in clearing folder LA/"
+fi
