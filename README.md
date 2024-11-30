@@ -8,7 +8,8 @@
 - Change username in server (and/or clients) from `uncleroger` to the corresponding VM's username
 - A unique google cloud bucket name. Try first with `hfl-data`.
   - If unsuccessful, try a unique name of your own. And then update the variable *bucket_name* in server and client
-- Update the variables `client_private_ips` and `client_public_ips` in server
+- Update the arrays `client_private_ips` and `client_public_ips` in server
+  - The index+1 value of the member of these arrays denote the client_no you assign later
 - Update the variable `client_no` in the client
   - Do remember which client VM you are assigning as client_no 1, 2, 3, etc.
 - Make sure the file `cloud.json` is present in the server and the clients
