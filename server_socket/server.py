@@ -3,6 +3,7 @@ import threading
 
 
 from common import *
+from communication import *
 
 
 clients = {}
@@ -13,25 +14,13 @@ def client_message_handler(client_socket, client_name):
     global clients, clients_lock
     while True:
         try:
-            message = client_socket.recv(1024).decode()
+            message = receive_message_as_json(client_socket)
             if message:
-                print(f"Message from {client_name}: {message}")
-                client_socket.sendall(b"Message received by server.")
-
-                if "unregister" in message:
+                if message.message_type == MessageType.SEND:
+                    send_to_client(message.receiver, message.content)
+                elif message.message_type == MessageType.UNREGISTER:
                     unregister_client(client_name)
                     break
-
-                if message.startswith("send"):
-                    message_parts = message.split(" ")
-                    try:
-                        receiver = message_parts[1]
-                        message = "".join(message_parts[2:])
-                        send_to_client(receiver, f"Message from {client_name}: {message}")
-                    except IndexError:
-                        print("Invalid Send command.")
-
-
             else:
                 print(f"{client_name} has forcibly disconnected.")
                 break
@@ -50,8 +39,13 @@ def send_to_client(client_name, message):
 
     with clients_lock:
         if client_name in clients:
-            client_socket = clients[client_name]
-            client_socket.sendall(message.encode())
+            send_message_as_json(
+                client_socket=clients[client_name],
+                message_type=MessageType.MESSAGE,
+                sender="Server",
+                receiver=client_name,
+                content=message
+            )
         else:
             print(f"Client {client_name} not found.")
 
@@ -77,23 +71,25 @@ def unregister_all_clients():
 
 def register_client(client_socket, client_address):
     global clients, clients_lock
-    client_socket.sendall(b"Enter your name: ")
-    client_name = client_socket.recv(1024).decode()
+
+    print(f"Connection from {client_address}")
+
+    send_message_as_json(client_socket, MessageType.REGISTER)
+    client_name = receive_message_as_json(client_socket).content
 
     while True:
         if "exit" in client_name:
             return False
         with clients_lock:
-            if client_name in clients:
-                client_socket.sendall(b"Name already taken. Enter a different name: ")
-                client_name = client_socket.recv(1024).decode()
-            else:
+            if client_name not in clients:
                 clients[client_name] = client_socket
-                print(f"{client_name} connected.")
                 break
+            else:
+                send_message_as_json(client_socket, MessageType.REGISTER)
+                client_name = receive_message_as_json(client_socket).content
 
     print(f"{client_name} connected.")
-    client_socket.sendall(b"Welcome to the server!")
+    send_message_as_json(client_socket, MessageType.REGISTERED)
 
     threading.Thread(target=client_message_handler, args=(client_socket, client_name), daemon=True).start()
 
