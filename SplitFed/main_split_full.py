@@ -25,9 +25,11 @@ GLOBAL_SHARED_GRAD_FROM_SERVER = None
 GLOBAL_SHARED_EPOCH = 0
 GLOBAL_SHARED_I = 0
 
+FEATURE_LIST = None
+LABEL_LIST = None
+
 server_model = ServerModel().to(device)
-server_optimizer = optim.SGD(server_model.parameters(), lr=0.01,
-            momentum=0.9, weight_decay=5e-4)
+server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
 loss_criteria = nn.CrossEntropyLoss()
 
 def server_train():
@@ -53,8 +55,7 @@ def server_train():
     GLOBAL_SHARED_LABELS = None
 
 client_model = ClientModel().to(device)
-client_optimizer = optim.SGD(client_model.parameters(), lr=0.01,
-            momentum=0.9, weight_decay=5e-4)
+client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
 def client_train():
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
@@ -79,16 +80,57 @@ def client_train():
             split_layer_tensor.backward(grads)
             client_optimizer.step()
 
-            print(f"Client Epoch {epoch + 1}, Batch {i + 1} completed")
+            # print(f"Client Epoch {epoch + 1}, Batch {i + 1} completed")
 
         print(f"Client Epoch {epoch + 1} completed")
 
     print("Client training done")
 
+
+def server_test():
+    global FEATURE_LIST, LABEL_LIST
+    if FEATURE_LIST is None or LABEL_LIST is None:
+        print("No data from client")
+        return
+
+    server_model.eval()
+    correct = 0
+    total = LABEL_LIST.size(0)
+
+    with torch.no_grad():
+        server_output = server_model(FEATURE_LIST)
+        loss = loss_criteria(server_output, LABEL_LIST)
+        print(f"Server test loss: {loss.item()}")
+
+        _, predicted = torch.max(server_output.data, 1)
+        correct += (predicted == LABEL_LIST).sum().item()
+
+    print(f"Server test accuracy: {correct / total}")
+
+
+def client_test():
+    global FEATURE_LIST, LABEL_LIST
+    client_model.eval()
+    feature_list = []
+    label_list = []
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            split_layer_tensor = client_model(images)
+            feature_list.append(split_layer_tensor)
+            label_list.append(labels)
+
+    FEATURE_LIST, LABEL_LIST = torch.cat(feature_list), torch.cat(label_list)
+
+    server_test()
+
+
+
 def train():
     client_train()
 
 def test():
-    pass
+    client_test()
 
 train()
+test()
