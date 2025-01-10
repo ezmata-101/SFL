@@ -34,6 +34,10 @@ loss_criteria = nn.CrossEntropyLoss()
 
 def server_train():
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
+
+    GLOBAL_SHARED_SPLIT_LAYER_TENSOR = torch.load(f"split_layer_tensor_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+    GLOBAL_SHARED_LABELS = torch.load(f"labels_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+
     if GLOBAL_SHARED_SPLIT_LAYER_TENSOR is None or GLOBAL_SHARED_LABELS is None:
         print("No data from client")
         return
@@ -50,7 +54,8 @@ def server_train():
     server_optimizer.step()
     split_layer_tensor.retain_grad()
 
-    GLOBAL_SHARED_GRAD_FROM_SERVER = split_layer_tensor.grad
+    torch.save(split_layer_tensor.grad, f"grad_from_server_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+
     GLOBAL_SHARED_SPLIT_LAYER_TENSOR = None
     GLOBAL_SHARED_LABELS = None
 
@@ -66,21 +71,20 @@ def client_train():
 
             client_optimizer.zero_grad()
             split_layer_tensor = client_model(images)
-            # split_layer_tensor.retain_grad()
             split_layer_tensor = split_layer_tensor.detach().requires_grad_(True)
-            GLOBAL_SHARED_SPLIT_LAYER_TENSOR = split_layer_tensor
-            GLOBAL_SHARED_LABELS = labels
+
+            torch.save(split_layer_tensor, f"split_layer_tensor_{epoch}_{i}.pt")
+            torch.save(labels, f"labels_{epoch}_{i}.pt")
+
             GLOBAL_SHARED_EPOCH = epoch
             GLOBAL_SHARED_I = i
 
             server_train()
 
-            grads = GLOBAL_SHARED_GRAD_FROM_SERVER
+            grads = torch.load(f"grad_from_server_{epoch}_{i}.pt")
 
             split_layer_tensor.backward(grads)
             client_optimizer.step()
-
-            # print(f"Client Epoch {epoch + 1}, Batch {i + 1} completed")
 
         print(f"Client Epoch {epoch + 1} completed")
 
