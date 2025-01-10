@@ -1,14 +1,25 @@
 import socket
 import threading
 import uuid
+import os
+import torch
+import time
+
 from common import *
 from communication import *
 
+from SplitFed.main_split_full import client_train
 
+client_socket = None
 UNIQUE_CLIENT_NAME = str(uuid.uuid4()).split("-")[0]
+CLIENT_NO = -1
 print(f"Client name: {UNIQUE_CLIENT_NAME}")
 
-def receive_message(client_socket):
+server_file_directory_path = None
+client_file_directory_path = None
+
+def receive_message():
+    global client_socket
     while True:
         try:
             message = receive_message_as_json(client_socket)
@@ -24,8 +35,44 @@ def receive_message(client_socket):
     client_socket.close()
     print("Disconnected from server.")
 
-def register_client(client_socket):
-    global UNIQUE_CLIENT_NAME
+def communicate_with_server_during_training(labels, split_layer_tensor, epoch, i):
+    global client_socket
+
+    # send_message_as_json(client_socket, MessageType.TRAINING_LABELS, UNIQUE_CLIENT_NAME, "", labels)
+    # send_message_as_json(client_socket, MessageType.TRAINING_FEATURES, UNIQUE_CLIENT_NAME, "", features)
+    # grads_message = receive_message_as_json(client_socket)
+
+    torch.save(labels, f"{client_file_directory_path}/labels_{epoch}_{i}.pt")
+    torch.save(split_layer_tensor, f"{client_file_directory_path}/split_layer_tensor_{epoch}_{i}.pt")
+
+    send_file(client_socket, client_file_directory_path, f"labels_{epoch}_{i}.pt")
+    send_file(client_socket, client_file_directory_path, f"split_layer_tensor_{epoch}_{i}.pt")
+
+    grads_message = receive_message_as_json(client_socket)
+    if grads_message.message_type == MessageType.REQUEST_TO_SEND_FILE:
+        receive_file(client_socket, server_file_directory_path, f"grads_{epoch}_{i}.pt")
+        grads = torch.load(f"{server_file_directory_path}/grads_{epoch}_{i}.pt")
+
+
+        return grads
+
+    return None
+
+
+def start_training():
+    global server_file_directory_path, client_file_directory_path
+    print("Starting training.")
+    send_message_as_json(client_socket, MessageType.REQUEST_TO_START, UNIQUE_CLIENT_NAME, "")
+    resp = receive_message_as_json(client_socket)
+    if resp.message_type == MessageType.START_TRAINING:
+        print("Training started.")
+        client_train(communicate_with_server_during_training)
+    else:
+        print("Failed to start training.")
+        return
+
+def register_client():
+    global UNIQUE_CLIENT_NAME, server_file_directory_path, client_file_directory_path, CLIENT_NO, client_socket
 
     while True:
         try:
@@ -35,7 +82,18 @@ def register_client(client_socket):
                 send_message_as_json(client_socket, MessageType.REGISTER, content=UNIQUE_CLIENT_NAME, sender="", receiver="")
 
             elif response.message_type == MessageType.REGISTERED:
-                print("Registered to server.")
+                CLIENT_NO = int(response.content)
+                print(f"Registered to server as: {UNIQUE_CLIENT_NAME}, client_id: {response}, client_no: {CLIENT_NO}")
+                server_file_directory_path = f"shared_files/client/{UNIQUE_CLIENT_NAME}/server_files"
+                client_file_directory_path = f"shared_files/client/{UNIQUE_CLIENT_NAME}/client_files"
+
+                if not os.path.exists(server_file_directory_path):
+                    os.makedirs(server_file_directory_path)
+                if not os.path.exists(client_file_directory_path):
+                    os.makedirs(client_file_directory_path)
+
+                start_training()
+
                 break
 
             else:
@@ -49,11 +107,12 @@ def register_client(client_socket):
 
 
 def start_client():
+    global client_socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER_ADDRESS, SERVER_PORT))
     print("Connected to server.")
-    register_client(client_socket)
-    threading.Thread(target=receive_message, args=(client_socket,), daemon=True).start()
+    register_client()
+    # threading.Thread(target=receive_message, args=(), daemon=True).start()
 
     while True:
         message = input()

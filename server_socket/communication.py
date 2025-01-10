@@ -1,5 +1,6 @@
 from enum import Enum
 import json
+import os
 
 class MessageType(Enum):
     REGISTER = 1
@@ -7,6 +8,14 @@ class MessageType(Enum):
     UNREGISTER = 3
     SEND = 4
     MESSAGE = 5
+    REQUEST_TO_START = 6
+    START_TRAINING = 7
+    TRAINING_LABELS = 8
+    TRAINING_FEATURES = 9
+    TRAINING_GRADS = 10
+    REQUEST_TO_SEND_FILE = 11
+    SEND_FILE = 12
+
 
 
 class Message:
@@ -50,6 +59,50 @@ def send_message_as_json(client_socket, message_type, sender="", receiver = "", 
     client_socket.sendall(json.dumps(message.to_dict()).encode())
 
 def receive_message_as_json(client_socket):
-    message_dict = json.loads(client_socket.recv(1024).decode())
+    message = client_socket.recv(1024)
+    try:
+        message_dict = json.loads(message.decode('utf-8'))
+    except UnicodeDecodeError:
+        return None
     message = Message(MessageType(message_dict["message_type"]), message_dict["sender"], message_dict["receiver"], message_dict["content"])
     return message
+
+def send_file(client_socket, directory_path, file_path):
+    send_message_as_json(client_socket, MessageType.REQUEST_TO_SEND_FILE, "", "", file_path)
+    if receive_message_as_json(client_socket).message_type == MessageType.SEND_FILE:
+        file_size  = os.path.getsize(f"{directory_path}/{file_path}")
+
+        client_socket.sendall(str(file_size).encode())
+        client_socket.recv(4096)
+
+        with open(f"{directory_path}/{file_path}", "rb") as file:
+            while True:
+                data = file.read(4096)
+                if not data:
+                    break
+                client_socket.sendall(data)
+        print(f"Sent {file_path}")
+    if receive_message_as_json(client_socket).content == "File received":
+        return True
+
+def receive_file(client_socket, directory_path, file_path):
+    print("receive file: ", directory_path, file_path)
+    send_message_as_json(client_socket, MessageType.SEND_FILE, "", "", file_path)
+
+    file_size = int(client_socket.recv(4096).decode())
+    client_socket.sendall("File size received".encode())
+
+    received = 0
+    with open(f"{directory_path}/{file_path}", "wb") as file:
+        while True:
+            data = client_socket.recv(4096)
+            received += len(data)
+            file.write(data)
+            if received >= file_size:
+                break
+        print(f"Received {file_path}")
+    send_message_as_json(client_socket, MessageType.SEND_FILE, "", "", "File received")
+    return True
+
+
+

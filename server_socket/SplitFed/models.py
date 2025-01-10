@@ -2,18 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-# input_layer = Input(shape=(28, 28))  # Input layer
-# # flatten_layer = Flatten()(input_layer)  # Flattening the input
-# # hidden_layer_1 = Dense(128, activation="relu")(flatten_layer)  # First hidden layer
-# # client_model = Model(inputs=input_layer, outputs=hidden_layer_1)
-# #
-# # # Server-side model
-# # server_input = Input(shape=(128,))  # Input from the client-side model
-# # hidden_layer_2 = Dense(64, activation="relu")(server_input)  # Second hidden layer
-# # output_layer = Dense(10, activation="softmax")(hidden_layer_2)  # Output layer
-# # server_model = Model(inputs=server_input, outputs=output_layer)
-
 # for mnist dataset
 class ClientModel(nn.Module):
     def __init__(self):

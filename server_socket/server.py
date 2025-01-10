@@ -1,14 +1,67 @@
 import socket
 import threading
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
+from SplitFed.main_split_full import *
 
 from common import *
 from communication import *
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 clients = {}
 clients_lock = threading.Lock()
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket = None
+
+server_file_directory_path = "shared_files/server/server_files"
+client_file_directory_path = "shared_files/server/client_files"
+specific_client_file_directory_path = None
+
+CLIENT_COUNT = 0
+
+def start_training(client_socket, client_name):
+    global specific_client_file_directory_path
+    print(f"Client {client_name} training started.")
+
+    server_model = ServerModel().to(device)
+    server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
+    loss_criteria = nn.CrossEntropyLoss()
+
+    while True:
+        try:
+            msg = receive_message_as_json(client_socket)
+            print(msg)
+            if msg.message_type == MessageType.REQUEST_TO_SEND_FILE:
+                labels_path = msg.content
+                receive_file(client_socket, specific_client_file_directory_path, labels_path)
+                slt_message = receive_message_as_json(client_socket)
+                print(slt_message)
+                if slt_message.message_type == MessageType.REQUEST_TO_SEND_FILE:
+                    slt_path = slt_message.content
+                    receive_file(client_socket, specific_client_file_directory_path, slt_path)
+                    labels = torch.load(f"{specific_client_file_directory_path}/{labels_path}")
+                    split_layer_tensor = torch.load(f"{specific_client_file_directory_path}/{slt_path}")
+
+                    server_optimizer.zero_grad()
+                    server_output = server_model(split_layer_tensor)
+                    loss = loss_criteria(server_output, labels)
+                    loss.backward()
+                    server_optimizer.step()
+                    split_layer_tensor.retain_grad()
+                    torch.save(split_layer_tensor.grad, f"{specific_client_file_directory_path}/grads_{labels_path}")
+
+                    send_file(client_socket, specific_client_file_directory_path, f"grads_{labels_path}")
+                else:
+                    print("Invalid message 1.")
+            else:
+                print("Invalid message 2.")
+        except ConnectionResetError:
+            print(f"Client {client_name} forcibly disconnected.")
+            break
+
 
 def client_message_handler(client_socket, client_name):
     global clients, clients_lock
@@ -21,6 +74,9 @@ def client_message_handler(client_socket, client_name):
                 elif message.message_type == MessageType.UNREGISTER:
                     unregister_client(client_name)
                     break
+                elif message.message_type == MessageType.REQUEST_TO_START:
+                    send_message_as_json(client_socket, MessageType.START_TRAINING)
+                    start_training(client_socket, message.sender)
             else:
                 print(f"{client_name} has forcibly disconnected.")
                 break
@@ -70,7 +126,7 @@ def unregister_all_clients():
 
 
 def register_client(client_socket, client_address):
-    global clients, clients_lock
+    global clients, clients_lock, specific_client_file_directory_path, CLIENT_COUNT
 
     print(f"Connection from {client_address}")
 
@@ -89,16 +145,23 @@ def register_client(client_socket, client_address):
                 client_name = receive_message_as_json(client_socket).content
 
     print(f"{client_name} connected.")
-    send_message_as_json(client_socket, MessageType.REGISTERED)
+    CLIENT_COUNT += 1
+    send_message_as_json(client_socket, MessageType.REGISTERED, content=CLIENT_COUNT)
+    specific_client_file_directory_path = f"{client_file_directory_path}/{client_name}"
+    if not os.path.exists(specific_client_file_directory_path):
+        os.makedirs(specific_client_file_directory_path)
 
     threading.Thread(target=client_message_handler, args=(client_socket, client_name), daemon=True).start()
+
+    # client_message_handler(client_socket, client_name)
 
     return True
 
 def start_server(host=SERVER_ADDRESS, port=SERVER_PORT):
     global server_socket, clients, clients_lock
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(5)
+    server_socket.listen()
     print(f"Server is listening on {host}:{port}...")
 
     while True:
@@ -147,15 +210,17 @@ def input_command_to_send():
     temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     temp_socket.connect((SERVER_ADDRESS, SERVER_PORT))
     _ = temp_socket.recv(1024).decode()
-    _ = temp_socket.sendall(b"exit")
+    send_message_as_json(temp_socket, MessageType.UNREGISTER, "exit", "exit")
     temp_socket.close()
 
 
 # Run the server
 if __name__ == "__main__":
-    server_thread = threading.Thread(target=start_server)
-    server_thread.start()
+    # server_thread = threading.Thread(target=start_server)
+    # server_thread.start()
 
-    input_command_to_send()
+    start_server()
+
+    # input_command_to_send()
 
 

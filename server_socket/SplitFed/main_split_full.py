@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from sfl_model import *
+
+from argparse import ArgumentParser, Namespace
+
+from SplitFed.models import *
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -16,8 +19,8 @@ transform = transforms.Compose([
 train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
 test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
 
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
 
 GLOBAL_SHARED_SPLIT_LAYER_TENSOR = None
 GLOBAL_SHARED_LABELS = None
@@ -28,60 +31,56 @@ GLOBAL_SHARED_I = 0
 FEATURE_LIST = None
 LABEL_LIST = None
 
-server_model = ServerModel().to(device)
-server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
-loss_criteria = nn.CrossEntropyLoss()
+CLIENT_NO = -1
 
 def server_train():
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
 
-    GLOBAL_SHARED_SPLIT_LAYER_TENSOR = torch.load(f"split_layer_tensor_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
-    GLOBAL_SHARED_LABELS = torch.load(f"labels_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+    server_model = ServerModel().to(device)
+    server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
+    loss_criteria = nn.CrossEntropyLoss()
 
-    if GLOBAL_SHARED_SPLIT_LAYER_TENSOR is None or GLOBAL_SHARED_LABELS is None:
-        print("No data from client")
-        return
+    while True:
+        print("Waiting for client")
+        input("Press Enter to continue...")
+        GLOBAL_SHARED_SPLIT_LAYER_TENSOR = torch.load(f"split_layer_tensor_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+        GLOBAL_SHARED_LABELS = torch.load(f"labels_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
 
-    server_optimizer.zero_grad()
-    split_layer_tensor = GLOBAL_SHARED_SPLIT_LAYER_TENSOR
-    labels = GLOBAL_SHARED_LABELS
+        if GLOBAL_SHARED_SPLIT_LAYER_TENSOR is None or GLOBAL_SHARED_LABELS is None:
+            print("No data from client")
+            return
 
-    server_output = server_model(split_layer_tensor)
-    loss = loss_criteria(server_output, labels)
+        server_optimizer.zero_grad()
+        split_layer_tensor = GLOBAL_SHARED_SPLIT_LAYER_TENSOR
+        labels = GLOBAL_SHARED_LABELS
 
-    loss.backward()
+        server_output = server_model(split_layer_tensor)
+        loss = loss_criteria(server_output, labels)
 
-    server_optimizer.step()
-    split_layer_tensor.retain_grad()
+        loss.backward()
 
-    torch.save(split_layer_tensor.grad, f"grad_from_server_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+        server_optimizer.step()
+        split_layer_tensor.retain_grad()
 
-    GLOBAL_SHARED_SPLIT_LAYER_TENSOR = None
-    GLOBAL_SHARED_LABELS = None
+        torch.save(split_layer_tensor.grad, f"grad_from_server_{GLOBAL_SHARED_EPOCH}_{GLOBAL_SHARED_I}.pt")
+
+        GLOBAL_SHARED_SPLIT_LAYER_TENSOR = None
+        GLOBAL_SHARED_LABELS = None
 
 client_model = ClientModel().to(device)
 client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
-def client_train():
+def client_train(comm_with_server):
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
-
+    client_model.train()
     for epoch in range(5):
         for i, (images, labels) in enumerate(train_loader):
             images, labels = images.to(device), labels.to(device)
-
             client_optimizer.zero_grad()
             split_layer_tensor = client_model(images)
             split_layer_tensor = split_layer_tensor.detach().requires_grad_(True)
 
-            torch.save(split_layer_tensor, f"split_layer_tensor_{epoch}_{i}.pt")
-            torch.save(labels, f"labels_{epoch}_{i}.pt")
-
-            GLOBAL_SHARED_EPOCH = epoch
-            GLOBAL_SHARED_I = i
-
-            server_train()
-
-            grads = torch.load(f"grad_from_server_{epoch}_{i}.pt")
+            grads = comm_with_server(labels, split_layer_tensor, epoch, i)
 
             split_layer_tensor.backward(grads)
             client_optimizer.step()
@@ -136,5 +135,22 @@ def train():
 def test():
     client_test()
 
-train()
-test()
+def parse_arg() -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument("--mode", type=str, default="server", help="server or client")
+    parser.add_argument("--client_no", type=int, default=-1, help="client number")
+    return parser.parse_args()
+
+def main(mode, client_no):
+    global CLIENT_NO
+    CLIENT_NO = client_no
+    if mode == "server":
+        server_train()
+
+    if mode == "client":
+        client_train()
+        client_test()
+
+if __name__ == "__main__":
+    args = parse_arg()
+    main(args.mode, args.client_no)
