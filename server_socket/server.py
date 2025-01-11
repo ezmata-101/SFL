@@ -33,12 +33,10 @@ def start_training(client_socket, client_name):
     while True:
         try:
             msg = receive_message_as_json(client_socket)
-            print(msg)
             if msg.message_type == MessageType.REQUEST_TO_SEND_FILE:
                 labels_path = msg.content
                 receive_file(client_socket, specific_client_file_directory_path, labels_path)
                 slt_message = receive_message_as_json(client_socket)
-                print(slt_message)
                 if slt_message.message_type == MessageType.REQUEST_TO_SEND_FILE:
                     slt_path = slt_message.content
                     receive_file(client_socket, specific_client_file_directory_path, slt_path)

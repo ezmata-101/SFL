@@ -81,12 +81,10 @@ def send_file(client_socket, directory_path, file_path):
                 if not data:
                     break
                 client_socket.sendall(data)
-        print(f"Sent {file_path}")
     if receive_message_as_json(client_socket).content == "File received":
         return True
 
 def receive_file(client_socket, directory_path, file_path):
-    print("receive file: ", directory_path, file_path)
     send_message_as_json(client_socket, MessageType.SEND_FILE, "", "", file_path)
 
     file_size = int(client_socket.recv(4096).decode())
@@ -100,7 +98,6 @@ def receive_file(client_socket, directory_path, file_path):
             file.write(data)
             if received >= file_size:
                 break
-        print(f"Received {file_path}")
     send_message_as_json(client_socket, MessageType.SEND_FILE, "", "", "File received")
     return True
 
