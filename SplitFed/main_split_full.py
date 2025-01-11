@@ -8,7 +8,9 @@ from argparse import ArgumentParser, Namespace
 
 from SplitFed.models import *
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+device = torch.device("cpu")
 
 # Load MNIST dataset
 transform = transforms.Compose([
@@ -16,11 +18,7 @@ transform = transforms.Compose([
     transforms.Normalize((0.5,), (0.5,))
 ])
 
-train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
-test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
 
-train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
 
 GLOBAL_SHARED_SPLIT_LAYER_TENSOR = None
 GLOBAL_SHARED_LABELS = None
@@ -32,6 +30,45 @@ FEATURE_LIST = None
 LABEL_LIST = None
 
 CLIENT_NO = -1
+
+
+def get_train_and_validation_loaders(client_no, balanced=False):
+    total_train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+    # train and validation split
+    train_size = int(0.8 * len(total_train_dataset))
+    val_size = len(total_train_dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(total_train_dataset, [train_size, val_size])
+
+    size = [0.33, 0.33, 0.34]
+    if not balanced:
+        size = [0.2, 0.2, 0.6]
+
+    if client_no == 0:
+        train_dataset, _ = torch.utils.data.random_split(train_dataset, [int(size[0] * len(train_dataset)), len(train_dataset) - int(size[0] * len(train_dataset))])
+        validation_dataset, _ = torch.utils.data.random_split(val_dataset, [int(size[0] * len(val_dataset)), len(val_dataset) - int(size[0] * len(val_dataset))])
+    elif client_no == 1:
+        _, train_dataset = torch.utils.data.random_split(train_dataset, [int(size[1] * len(train_dataset)), len(train_dataset) - int(size[1] * len(train_dataset))])
+        _, validation_dataset = torch.utils.data.random_split(val_dataset, [int(size[1] * len(val_dataset)), len(val_dataset) - int(size[1] * len(val_dataset))])
+    else:
+        _, train_dataset = torch.utils.data.random_split(train_dataset, [int(size[2] * len(train_dataset)), len(train_dataset) - int(size[2] * len(train_dataset))])
+        _, validation_dataset = torch.utils.data.random_split(val_dataset, [int(size[2] * len(val_dataset)), len(val_dataset) - int(size[2] * len(val_dataset))])
+
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    validation_loader = DataLoader(validation_dataset, batch_size=128, shuffle=False)
+    return train_loader, validation_loader
+
+
+
+
+# def get_train_loader(client_no, biased=False):
+#     train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+#     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+#     return train_loader
+
+def get_test_loader():
+    test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
+    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+    return test_loader
 
 def server_train():
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
@@ -72,6 +109,7 @@ client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
 def client_train(comm_with_server, comm_with_fed_server = None):
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
+    train_loader = get_train_and_validation_loaders(CLIENT_NO, balanced=False)[0]
     client_model.train()
     for epoch in range(5):
         for i, (images, labels) in enumerate(train_loader):
@@ -86,6 +124,8 @@ def client_train(comm_with_server, comm_with_fed_server = None):
             client_optimizer.step()
 
         print(f"Client Epoch {epoch + 1} completed")
+        if comm_with_fed_server:
+            comm_with_fed_server(client_model, epoch)
 
     if comm_with_fed_server:
         comm_with_fed_server(client_model, -1)
@@ -118,7 +158,7 @@ def test_split_model(final_client_model, server_model):
     server_model.eval()
     correct = 0
     total = 0
-
+    test_loader = get_test_loader()
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)

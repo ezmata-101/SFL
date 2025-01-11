@@ -10,7 +10,7 @@ from SplitFed.main_split_full import *
 from common import *
 from communication import *
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 clients = {}
 clients_lock = threading.Lock()
@@ -68,8 +68,15 @@ def start_training(client_socket, client_name):
                 if final_client_model_path:
                     test(final_client_model_path, server_model)
                 break
+            elif msg.message_type == MessageType.REQUEST_TO_SEND_VALIDATION_LOADER:
+                validation_loader_path = msg.content
+                receive_file(client_socket, specific_client_file_directory_path, validation_loader_path)
+            elif msg.message_type == MessageType.REQUEST_TO_SEND_MODEL:
+                model_path = msg.content
+                receive_file(client_socket, specific_client_file_directory_path, model_path)
             else:
-                print("Invalid message 2.")
+                print("Invalid message 2: ", msg.message_type, msg.sender, msg.receiver, msg.content)
+                send_message_as_json(client_socket, MessageType.INVALID_MESSAGE)
         except ConnectionResetError:
             print(f"Client {client_name} forcibly disconnected.")
             break

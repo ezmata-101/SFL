@@ -20,6 +20,9 @@ class MessageType(Enum):
     REQUEST_TO_SEND_FINAL_MODEL = 15
     SEND_FINAL_MODEL = 16
     TRAINING_DONE = 17
+    REQUEST_TO_SEND_VALIDATION_LOADER = 18
+    SEND_VALIDATION_LOADER = 19
+    INVALID_MESSAGE = -1
 
 class Message:
     def __init__(self, message_type, sender, receiver, content):
@@ -87,8 +90,8 @@ def send_file(client_socket, directory_path, file_path, message_type = MessageTy
     if receive_message_as_json(client_socket).content == "File received":
         return True
 
-def receive_file(client_socket, directory_path, file_path):
-    send_message_as_json(client_socket, MessageType.SEND_FILE, "", "", file_path)
+def receive_file(client_socket, directory_path, file_path, message_type = MessageType.SEND_FILE):
+    send_message_as_json(client_socket, message_type, "", "", file_path)
 
     file_size = int(client_socket.recv(4096).decode())
     client_socket.sendall("File size received".encode())
