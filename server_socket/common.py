@@ -1,2 +1,0 @@
-SERVER_ADDRESS = "localhost"
-SERVER_PORT = 12345

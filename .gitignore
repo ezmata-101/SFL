@@ -9,3 +9,5 @@ id_rsa
 Split-Learning-and-Federated-Learning
 */data
 ./shared_data
+./data
+/data/

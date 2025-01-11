@@ -1,0 +1,11 @@
+*.npy
+*.npz
+*.tfrecord*
+./shared_data
+./SplitFed/data
+data
+*.gz
+*.pkl
+*ubyte
+*/raw/*
+
