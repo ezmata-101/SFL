@@ -30,6 +30,8 @@ def start_training(client_socket, client_name):
     server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
     loss_criteria = nn.CrossEntropyLoss()
 
+    final_client_model_path = None
+
     while True:
         try:
             msg = receive_message_as_json(client_socket)
@@ -54,12 +56,29 @@ def start_training(client_socket, client_name):
                     send_file(client_socket, specific_client_file_directory_path, f"grads_{labels_path}")
                 else:
                     print("Invalid message 1.")
+
+            elif msg.message_type == MessageType.REQUEST_TO_SEND_FINAL_MODEL:
+                    final_model_path = msg.content
+                    receive_file(client_socket, specific_client_file_directory_path, final_model_path)
+                    final_client_model_path = f"{specific_client_file_directory_path}/{final_model_path}"
+            elif msg.message_type == MessageType.TRAINING_DONE:
+                send_message_as_json(client_socket, MessageType.TRAINING_DONE)
+                print(f"Client {client_name} training done.")
+
+                if final_client_model_path:
+                    test(final_client_model_path, server_model)
+                break
             else:
                 print("Invalid message 2.")
         except ConnectionResetError:
             print(f"Client {client_name} forcibly disconnected.")
             break
 
+def test(client_model_path, server_model):
+    final_client_model = ClientModel().to(device)
+    final_client_model.load_state_dict(torch.load(client_model_path))
+
+    test_split_model(final_client_model, server_model)
 
 def client_message_handler(client_socket, client_name):
     global clients, clients_lock
@@ -151,8 +170,6 @@ def register_client(client_socket, client_address):
 
     threading.Thread(target=client_message_handler, args=(client_socket, client_name), daemon=True).start()
 
-    # client_message_handler(client_socket, client_name)
-
     return True
 
 def start_server(host=SERVER_ADDRESS, port=SERVER_PORT):
@@ -214,11 +231,6 @@ def input_command_to_send():
 
 # Run the server
 if __name__ == "__main__":
-    # server_thread = threading.Thread(target=start_server)
-    # server_thread.start()
-
     start_server()
-
-    # input_command_to_send()
 
 

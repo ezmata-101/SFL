@@ -70,7 +70,7 @@ def server_train():
 client_model = ClientModel().to(device)
 client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
-def client_train(comm_with_server):
+def client_train(comm_with_server, comm_with_fed_server = None):
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
     client_model.train()
     for epoch in range(5):
@@ -87,6 +87,8 @@ def client_train(comm_with_server):
 
         print(f"Client Epoch {epoch + 1} completed")
 
+    if comm_with_fed_server:
+        comm_with_fed_server(client_model, -1)
     print("Client training done")
 
 
@@ -109,6 +111,24 @@ def server_test():
         correct += (predicted == LABEL_LIST).sum().item()
 
     print(f"Server test accuracy: {correct / total}")
+
+
+def test_split_model(final_client_model, server_model):
+    final_client_model.eval()
+    server_model.eval()
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            split_layer_tensor = final_client_model(images)
+            server_output = server_model(split_layer_tensor)
+            _, predicted = torch.max(server_output.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print(f"Test accuracy: {correct / total}")
 
 
 def client_test():

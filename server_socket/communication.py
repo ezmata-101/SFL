@@ -15,8 +15,11 @@ class MessageType(Enum):
     TRAINING_GRADS = 10
     REQUEST_TO_SEND_FILE = 11
     SEND_FILE = 12
-
-
+    REQUEST_TO_SEND_MODEL = 13
+    SEND_MODEL = 14
+    REQUEST_TO_SEND_FINAL_MODEL = 15
+    SEND_FINAL_MODEL = 16
+    TRAINING_DONE = 17
 
 class Message:
     def __init__(self, message_type, sender, receiver, content):
@@ -67,8 +70,8 @@ def receive_message_as_json(client_socket):
     message = Message(MessageType(message_dict["message_type"]), message_dict["sender"], message_dict["receiver"], message_dict["content"])
     return message
 
-def send_file(client_socket, directory_path, file_path):
-    send_message_as_json(client_socket, MessageType.REQUEST_TO_SEND_FILE, "", "", file_path)
+def send_file(client_socket, directory_path, file_path, message_type = MessageType.REQUEST_TO_SEND_FILE):
+    send_message_as_json(client_socket, message_type, "", "", file_path)
     if receive_message_as_json(client_socket).message_type == MessageType.SEND_FILE:
         file_size  = os.path.getsize(f"{directory_path}/{file_path}")
 

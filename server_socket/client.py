@@ -1,9 +1,6 @@
 import socket
-import threading
 import uuid
-import os
 import torch
-import time
 
 from common import *
 from communication import *
@@ -38,10 +35,6 @@ def receive_message():
 def communicate_with_server_during_training(labels, split_layer_tensor, epoch, i):
     global client_socket
 
-    # send_message_as_json(client_socket, MessageType.TRAINING_LABELS, UNIQUE_CLIENT_NAME, "", labels)
-    # send_message_as_json(client_socket, MessageType.TRAINING_FEATURES, UNIQUE_CLIENT_NAME, "", features)
-    # grads_message = receive_message_as_json(client_socket)
-
     torch.save(labels, f"{client_file_directory_path}/labels_{epoch}_{i}.pt")
     torch.save(split_layer_tensor, f"{client_file_directory_path}/split_layer_tensor_{epoch}_{i}.pt")
 
@@ -58,6 +51,13 @@ def communicate_with_server_during_training(labels, split_layer_tensor, epoch, i
 
     return None
 
+def communicate_with_fed_server(client_model, epoch):
+    global client_socket
+    if epoch == -1:
+        torch.save(client_model.state_dict(), f"{client_file_directory_path}/client_model_final.pt")
+        send_file(client_socket, client_file_directory_path, file_path=f"client_model_final.pt", message_type=MessageType.REQUEST_TO_SEND_FINAL_MODEL)
+        return
+
 
 def start_training():
     global server_file_directory_path, client_file_directory_path
@@ -66,7 +66,10 @@ def start_training():
     resp = receive_message_as_json(client_socket)
     if resp.message_type == MessageType.START_TRAINING:
         print("Training started.")
-        client_train(communicate_with_server_during_training)
+        client_train(communicate_with_server_during_training, communicate_with_fed_server)
+        send_message_as_json(client_socket, MessageType.TRAINING_DONE, UNIQUE_CLIENT_NAME, "")
+        if receive_message_as_json(client_socket).message_type == MessageType.TRAINING_DONE:
+            print("Training done.")
     else:
         print("Failed to start training.")
         return
@@ -112,7 +115,6 @@ def start_client():
     client_socket.connect((SERVER_ADDRESS, SERVER_PORT))
     print("Connected to server.")
     register_client()
-    # threading.Thread(target=receive_message, args=(), daemon=True).start()
 
     while True:
         message = input()
