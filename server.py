@@ -31,6 +31,7 @@ def start_training(client_socket, client_name):
     loss_criteria = nn.CrossEntropyLoss()
 
     final_client_model_path = None
+    final_validation_loader_path = None
 
     while True:
         try:
@@ -70,16 +71,35 @@ def start_training(client_socket, client_name):
                 break
             elif msg.message_type == MessageType.REQUEST_TO_SEND_VALIDATION_LOADER:
                 validation_loader_path = msg.content
+                final_validation_loader_path = f"{specific_client_file_directory_path}/{validation_loader_path}"
                 receive_file(client_socket, specific_client_file_directory_path, validation_loader_path)
             elif msg.message_type == MessageType.REQUEST_TO_SEND_MODEL:
                 model_path = msg.content
                 receive_file(client_socket, specific_client_file_directory_path, model_path)
+                final_client_model_path = f"{specific_client_file_directory_path}/{model_path}"
+                validate_model(final_client_model_path, server_model, final_validation_loader_path)
             else:
                 print("Invalid message 2: ", msg.message_type, msg.sender, msg.receiver, msg.content)
                 send_message_as_json(client_socket, MessageType.INVALID_MESSAGE)
         except ConnectionResetError:
             print(f"Client {client_name} forcibly disconnected.")
             break
+
+def validate_model(client_model_path, server_model, validation_loader_path):
+    try:
+        temp_client_model = ClientModel().to(device)
+        temp_client_model.load_state_dict(torch.load(client_model_path))
+
+        temp_server_model = ServerModel().to(device)
+        temp_server_model.load_state_dict(server_model.state_dict())
+
+        validation_loader = torch.load(validation_loader_path)
+        validate_split_model(temp_client_model, temp_server_model, validation_loader)
+
+        return True
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 def test(client_model_path, server_model):
     final_client_model = ClientModel().to(device)

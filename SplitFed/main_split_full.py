@@ -109,7 +109,7 @@ client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
 def client_train(comm_with_server, comm_with_fed_server = None):
     global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
-    train_loader = get_train_and_validation_loaders(CLIENT_NO, balanced=False)[0]
+    train_loader, validation_loader = get_train_and_validation_loaders(CLIENT_NO, balanced=False)
     client_model.train()
     for epoch in range(5):
         for i, (images, labels) in enumerate(train_loader):
@@ -125,7 +125,7 @@ def client_train(comm_with_server, comm_with_fed_server = None):
 
         print(f"Client Epoch {epoch + 1} completed")
         if comm_with_fed_server:
-            comm_with_fed_server(client_model, epoch)
+            comm_with_fed_server(client_model, epoch, validation_loader)
 
     if comm_with_fed_server:
         comm_with_fed_server(client_model, -1)
@@ -151,6 +151,23 @@ def server_test():
         correct += (predicted == LABEL_LIST).sum().item()
 
     print(f"Server test accuracy: {correct / total}")
+
+def validate_split_model(temp_client_model, temp_server_model, validation_loader):
+    temp_client_model.eval()
+    temp_server_model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in validation_loader:
+            images, labels = images.to(device), labels.to(device)
+            split_layer_tensor = temp_client_model(images)
+            server_output = temp_server_model(split_layer_tensor)
+            _, predicted = torch.max(server_output.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print(f"Validation accuracy: {correct / total}")
+
 
 
 def test_split_model(final_client_model, server_model):

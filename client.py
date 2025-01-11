@@ -52,19 +52,18 @@ def communicate_with_server_during_training(labels, split_layer_tensor, epoch, i
 
 def communicate_with_fed_server(client_model, epoch, validation_loader=None):
     global client_socket
+    if validation_loader:
+        torch.save(validation_loader, f"{client_file_directory_path}/validation_loader.pt")
+        send_file(client_socket, client_file_directory_path, f"validation_loader.pt", MessageType.REQUEST_TO_SEND_VALIDATION_LOADER)
+
     if epoch == -1:
         torch.save(client_model.state_dict(), f"{client_file_directory_path}/client_model_final.pt")
         send_file(client_socket, client_file_directory_path, file_path=f"client_model_final.pt", message_type=MessageType.REQUEST_TO_SEND_FINAL_MODEL)
         return
+
     else:
         torch.save(client_model.state_dict(), f"{client_file_directory_path}/client_model_{epoch}.pt")
         send_file(client_socket, client_file_directory_path, f"client_model_{epoch}.pt", MessageType.REQUEST_TO_SEND_MODEL)
-
-    if validation_loader:
-        torch.save(validation_loader, f"{client_file_directory_path}/validation_loader_{epoch}.pt")
-        send_file(client_socket, client_file_directory_path, f"validation_loader_{epoch}.pt", MessageType.REQUEST_TO_SEND_VALIDATION_LOADER)
-
-
 
 
 def start_training():
