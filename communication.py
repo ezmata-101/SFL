@@ -23,6 +23,10 @@ class MessageType(Enum):
     REQUEST_TO_SEND_VALIDATION_LOADER = 18
     SEND_VALIDATION_LOADER = 19
     INVALID_MESSAGE = -1
+    VALIDATION_DONE = 20
+    VALIDATION_RECEIVED = 21
+    REQUEST_FOR_AGGREGATED_MODEL = 22
+    SEND_AGGREGATED_MODEL = 23
 
 class Message:
     def __init__(self, message_type, sender, receiver, content):
@@ -30,9 +34,10 @@ class Message:
         self.sender = sender
         self.receiver = receiver
         self.content = content
+        self.epoch = -1
 
     def to_string(self):
-        return f"{self.message_type.value} {self.sender} {self.receiver} {self.content}"
+        return f"{self.message_type.value} {self.sender} {self.receiver} {self.content} {self.epoch}"
 
     def register(self):
         return Message(MessageType.REGISTER, self.sender, self.receiver, self.content)
@@ -45,7 +50,8 @@ class Message:
             "message_type": self.message_type.value,
             "sender": self.sender,
             "receiver": self.receiver,
-            "content": self.content
+            "content": self.content,
+            "epoch": self.epoch
         }
 
     def from_dict(self, message_dict):
@@ -53,11 +59,11 @@ class Message:
         self.sender = message_dict["sender"]
         self.receiver = message_dict["receiver"]
         self.content = message_dict["content"]
+        self.epoch = message_dict["epoch"]
         return self
 
     def __str__(self):
-        return f"{self.message_type} {self.sender} {self.receiver} {self.content}"
-
+        return f"{self.message_type} {self.sender} {self.receiver} {self.content} {self.epoch}"
 
 
 def send_message_as_json(client_socket, message_type, sender="", receiver = "", content = ""):

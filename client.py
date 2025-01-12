@@ -1,6 +1,8 @@
 import socket
+import time
 import uuid
 import torch
+from argparse import ArgumentParser, Namespace
 
 from common import *
 from communication import *
@@ -65,6 +67,25 @@ def communicate_with_fed_server(client_model, epoch, validation_loader=None):
         torch.save(client_model.state_dict(), f"{client_file_directory_path}/client_model_{epoch}.pt")
         send_file(client_socket, client_file_directory_path, f"client_model_{epoch}.pt", MessageType.REQUEST_TO_SEND_MODEL)
 
+        while True:
+            message = receive_message_as_json(client_socket)
+            file_path = None
+            if message.message_type == MessageType.VALIDATION_DONE:
+                print(f"Validation {epoch}: {message.content}")
+                send_message_as_json(client_socket, MessageType.VALIDATION_RECEIVED, UNIQUE_CLIENT_NAME, "")
+                # print(f"Waiting for aggregated model for epoch {epoch}")
+                # # while True:
+                # send_message_as_json(client_socket, MessageType.REQUEST_FOR_AGGREGATED_MODEL, UNIQUE_CLIENT_NAME,"", content=epoch)
+                # resp = receive_message_as_json(client_socket)
+                # if resp.message_type == MessageType.SEND_AGGREGATED_MODEL:
+                #     file_path = resp.content
+                #     receive_file(client_socket, server_file_directory_path, file_path)
+                #     break
+                # else:
+                #     time.sleep(5)
+                # break
+            else:
+                print("Failed to receive validation result, trying again.")
 
 def start_training():
     global server_file_directory_path, client_file_directory_path
@@ -92,7 +113,8 @@ def register_client():
                 send_message_as_json(client_socket, MessageType.REGISTER, content=UNIQUE_CLIENT_NAME, sender="", receiver="")
 
             elif response.message_type == MessageType.REGISTERED:
-                CLIENT_NO = int(response.content)
+                if CLIENT_NO == -1:
+                    CLIENT_NO = int(response.content)
                 print(f"Registered to server as: {UNIQUE_CLIENT_NAME}, client_id: {response}, client_no: {CLIENT_NO}")
                 server_file_directory_path = f"shared_files/client/{UNIQUE_CLIENT_NAME}/server_files"
                 client_file_directory_path = f"shared_files/client/{UNIQUE_CLIENT_NAME}/client_files"
@@ -115,6 +137,13 @@ def register_client():
 
     print("Registered to server as: ", UNIQUE_CLIENT_NAME)
 
+
+def parse_arg() -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument("--balanced", type=bool, default=True, help="Balanced or Imbalanced")
+    parser.add_argument("--client", type=int, default=-1, help="Client No")
+
+    return parser.parse_args()
 
 def start_client():
     global client_socket
