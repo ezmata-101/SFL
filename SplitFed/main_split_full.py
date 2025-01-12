@@ -5,12 +5,11 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from argparse import ArgumentParser, Namespace
+from common import *
 
 from SplitFed.models import *
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# device = torch.device("cpu")
+device = DEVICE
 
 # Load MNIST dataset
 transform = transforms.Compose([
@@ -36,7 +35,7 @@ torch.manual_seed(42)
 
 
 
-def get_train_and_validation_loaders(client_no, balanced=False):
+def get_train_and_validation_loaders(client_no, balanced=True):
     total_train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
     # train and validation split
     train_size = int(0.8 * len(total_train_dataset))
@@ -112,10 +111,9 @@ client_model = ClientModel().to(device)
 client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
 def client_train(comm_with_server, comm_with_fed_server = None):
-    global GLOBAL_SHARED_SPLIT_LAYER_TENSOR, GLOBAL_SHARED_LABELS, GLOBAL_SHARED_GRAD_FROM_SERVER, GLOBAL_SHARED_EPOCH, GLOBAL_SHARED_I
-    train_loader, validation_loader = get_train_and_validation_loaders(CLIENT_NO, balanced=False)
+    train_loader, validation_loader = get_train_and_validation_loaders(CLIENT_NO, balanced=True)
     client_model.train()
-    for epoch in range(10):
+    for epoch in range(TOTAL_GLOBAL_EPOCH):
         for i, (images, labels) in enumerate(train_loader):
             images, labels = images.to(device), labels.to(device)
             client_optimizer.zero_grad()

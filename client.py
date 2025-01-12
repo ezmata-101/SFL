@@ -74,16 +74,20 @@ def communicate_with_fed_server(client_model, epoch, validation_loader=None):
                 print(f"Validation {epoch}: {message.content}")
                 send_message_as_json(client_socket, MessageType.VALIDATION_RECEIVED, UNIQUE_CLIENT_NAME, "")
                 # print(f"Waiting for aggregated model for epoch {epoch}")
-                # # while True:
-                # send_message_as_json(client_socket, MessageType.REQUEST_FOR_AGGREGATED_MODEL, UNIQUE_CLIENT_NAME,"", content=epoch)
-                # resp = receive_message_as_json(client_socket)
-                # if resp.message_type == MessageType.SEND_AGGREGATED_MODEL:
-                #     file_path = resp.content
-                #     receive_file(client_socket, server_file_directory_path, file_path)
-                #     break
-                # else:
-                #     time.sleep(5)
-                # break
+                time.sleep(5)
+                while True:
+                    send_message_as_json(client_socket, MessageType.REQUEST_FOR_AGGREGATED_MODEL, UNIQUE_CLIENT_NAME,"", content=epoch)
+                    resp = receive_message_as_json(client_socket)
+                    if resp.message_type == MessageType.SEND_AGGREGATED_MODEL:
+                        file_path = resp.content
+                        receive_file(client_socket, server_file_directory_path, file_path)
+
+                        client_model.load_state_dict(torch.load(f"{server_file_directory_path}/{file_path}"))
+
+                        break
+                    else:
+                        time.sleep(2)
+                break
             else:
                 print("Failed to receive validation result, trying again.")
 

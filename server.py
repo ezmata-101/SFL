@@ -14,7 +14,7 @@ from common import *
 from communication import *
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = DEVICE
 
 
 clients = {}
@@ -32,7 +32,7 @@ specific_client_file_directory_path = None
 
 CLIENT_COUNT = 0
 
-GLOBAL_EPOCH = 10
+GLOBAL_EPOCH = TOTAL_GLOBAL_EPOCH
 TOTAL_CLIENTS = 3
 CLIENT_EPOCH_COUNT = [0] * GLOBAL_EPOCH
 CLIENT_MODEL_PATHS = [[None] * GLOBAL_EPOCH for _ in range(TOTAL_CLIENTS)]
@@ -87,6 +87,7 @@ def start_training(client_socket, client_name):
                     final_model_path = msg.content
                     receive_file(client_socket, specific_client_file_directory_path, final_model_path)
                     final_client_model_path = f"{specific_client_file_directory_path}/{final_model_path}"
+
             elif msg.message_type == MessageType.TRAINING_DONE:
                 send_message_as_json(client_socket, MessageType.TRAINING_DONE)
                 print(f"Client {client_name} training done.")
@@ -94,10 +95,12 @@ def start_training(client_socket, client_name):
                 if final_client_model_path:
                     test(final_client_model_path, server_model)
                 break
+
             elif msg.message_type == MessageType.REQUEST_TO_SEND_VALIDATION_LOADER:
                 validation_loader_path = msg.content
                 final_validation_loader_path = f"{specific_client_file_directory_path}/{validation_loader_path}"
                 receive_file(client_socket, specific_client_file_directory_path, validation_loader_path)
+
             elif msg.message_type == MessageType.REQUEST_TO_SEND_MODEL:
                 model_path = msg.content
                 global_epoch = int(model_path.split("_")[2].split(".")[0])
@@ -125,14 +128,13 @@ def start_training(client_socket, client_name):
                     print(f"Client {client_name} failed to validate model for epoch {global_epoch}.")
                     send_message_as_json(client_socket, MessageType.INVALID_MESSAGE, "Server", client_name, "Validation failed.")
 
-
             elif msg.message_type == MessageType.REQUEST_FOR_AGGREGATED_MODEL:
                 epoch = int(msg.content)
                 with epoch_count_lock:
                     if CLIENT_EPOCH_COUNT[epoch] == TOTAL_CLIENTS:
                         send_fed_avg_model_to_clients(client_socket, epoch)
-                    # else:
-                    #     send_message_as_json(client_socket, MessageType.INVALID_MESSAGE, "Server", client_name, "Not all clients have validated their models.")
+                    else:
+                        send_message_as_json(client_socket, MessageType.INVALID_MESSAGE, "Server", client_name, "Not all clients have validated their models.")
             else:
                 print("Invalid message 2: ", msg.message_type, msg.sender, msg.receiver, msg.content)
                 send_message_as_json(client_socket, MessageType.INVALID_MESSAGE)
@@ -208,7 +210,6 @@ def client_message_handler(client_socket, client_name):
             del clients[client_name]
     client_socket.close()
     print(f"{client_name} disconnected.")
-
 
 def send_to_client(client_name, message):
     global clients, clients_lock
