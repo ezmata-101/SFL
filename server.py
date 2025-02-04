@@ -33,7 +33,7 @@ specific_client_file_directory_path = None
 CLIENT_COUNT = 0
 
 GLOBAL_EPOCH = TOTAL_GLOBAL_EPOCH
-TOTAL_CLIENTS = 3
+TOTAL_CLIENTS = GLOBAL_TOTAL_CLIENTS
 CLIENT_EPOCH_COUNT = [0] * GLOBAL_EPOCH
 CLIENT_MODEL_PATHS = [[None] * GLOBAL_EPOCH for _ in range(TOTAL_CLIENTS)]
 CLIENT_VALIDATION_LOADER_PATHS = [[None] * GLOBAL_EPOCH for _ in range(TOTAL_CLIENTS)]
@@ -169,7 +169,7 @@ def validate_model(client_model_path, server_model, validation_loader_path):
         temp_server_model = ServerModel().to(device)
         temp_server_model.load_state_dict(server_model.state_dict())
 
-        validation_loader = torch.load(validation_loader_path)
+        validation_loader = torch.load(validation_loader_path, weights_only=False)
         validation_accuracy = validate_split_model(temp_client_model, temp_server_model, validation_loader)
         return validation_accuracy
     except Exception as e:
